@@ -9,43 +9,47 @@ public class SnapToPosition : MonoBehaviour
 {
     public Transform snapPoint;
 
-    XRGrabInteractable grab;
-    Rigidbody rb;
+    private XRGrabInteractable grab;
+    private Rigidbody rb;
 
-    void Awake()
+    private void Awake()
     {
         grab = GetComponent<XRGrabInteractable>();
         rb = GetComponent<Rigidbody>();
+
+        // IMPORTANT:
+        // Parts must not be affected by physics.
+        rb.isKinematic = true;
+        rb.useGravity = false;
     }
 
-    void OnEnable()
+    private void OnEnable()
     {
         grab.selectExited.AddListener(OnRelease);
     }
 
-    void OnDisable()
+    private void OnDisable()
     {
         grab.selectExited.RemoveListener(OnRelease);
     }
 
-    void OnRelease(SelectExitEventArgs args)
+    private void OnRelease(SelectExitEventArgs args)
     {
-        StartCoroutine(SnapRoutine());
+        if (snapPoint != null)
+            StartCoroutine(SnapRoutine());
     }
 
-    IEnumerator SnapRoutine()
+    private IEnumerator SnapRoutine()
     {
         yield return new WaitForEndOfFrame();
-        yield return new WaitForSeconds(0.15f);
 
         rb.isKinematic = true;
-
-        rb.position = snapPoint.position;
-        rb.rotation = snapPoint.rotation;
+        rb.useGravity = false;
 
         rb.linearVelocity = Vector3.zero;
         rb.angularVelocity = Vector3.zero;
 
-        rb.isKinematic = false;
+        rb.position = snapPoint.position;
+        rb.rotation = snapPoint.rotation;
     }
 }
