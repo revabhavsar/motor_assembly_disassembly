@@ -1,4 +1,3 @@
-using System.Collections;
 using UnityEngine;
 using UnityEngine.XR.Interaction.Toolkit;
 using UnityEngine.XR.Interaction.Toolkit.Interactables;
@@ -10,19 +9,31 @@ public class AssemblyPart : MonoBehaviour
     [Header("Assembly")]
     public AssemblyManager.AssemblyPartType partType;
 
-    [Header("Snap Point")]
-    public Transform snapPoint;
+    [Header("Colour feedback")]
+    public Color correctColour = Color.green;
+    public Color wrongColour = Color.red;
 
     private XRGrabInteractable grab;
     private Rigidbody rb;
-
-    private bool assembled = false;
-    private bool snapping = false;
+    private Renderer[] renderers;
+    private Color[][] originalColours;
+    private bool assembled;
+    private bool wrongSelection;
 
     private void Awake()
     {
         grab = GetComponent<XRGrabInteractable>();
         rb = GetComponent<Rigidbody>();
+        renderers = GetComponentsInChildren<Renderer>(true);
+        originalColours = new Color[renderers.Length][];
+
+        for (int i = 0; i < renderers.Length; i++)
+        {
+            Material[] mats = renderers[i].materials;
+            originalColours[i] = new Color[mats.Length];
+            for (int j = 0; j < mats.Length; j++)
+                originalColours[i][j] = mats[j].color;
+        }
 
         rb.isKinematic = true;
         rb.useGravity = false;
@@ -32,6 +43,7 @@ public class AssemblyPart : MonoBehaviour
     {
         if (grab != null)
         {
+            grab.selectEntered.AddListener(OnGrabbed);
             grab.selectExited.AddListener(OnReleased);
         }
     }
@@ -40,184 +52,92 @@ public class AssemblyPart : MonoBehaviour
     {
         if (grab != null)
         {
+            grab.selectEntered.RemoveListener(OnGrabbed);
             grab.selectExited.RemoveListener(OnReleased);
         }
     }
 
+    private void OnGrabbed(SelectEnterEventArgs args)
+    {
+        if (assembled || AssemblyManager.Instance == null) return;
+
+        bool correct = AssemblyManager.Instance.CanAssemble(partType);
+        wrongSelection = !correct;
+        SetColour(correct ? correctColour : wrongColour);
+
+        if (!correct)
+            Debug.LogWarning($"WRONG PART: {partType}. Required: {AssemblyManager.Instance.CurrentStepName()}");
+        else
+            Debug.Log($"Correct part selected: {partType}. Move it into its matching placement trigger.");
+    }
+
     private void OnReleased(SelectExitEventArgs args)
     {
-        // Already assembled or currently snapping
-        if (assembled || snapping)
-        {
-            return;
-        }
+        if (assembled || args.isCanceled) return;
 
-        // Ignore cancelled release
-        if (args.isCanceled)
-        {
-            return;
-        }
+        // Colour feedback remains while the user is holding the part.
+        // On release, restore the source material; only the matching trigger can place it.
+        RestoreColour();
+    }
 
-        // -------------------------------------------------
-        // CHECK ASSEMBLY MANAGER
-        // -------------------------------------------------
+    public bool IsAssembled() => assembled;
 
-        if (AssemblyManager.Instance == null)
-        {
-            Debug.LogError(
-                gameObject.name +
-                " : AssemblyManager.Instance is NULL!"
-            );
-
-            return;
-        }
-
-        // -------------------------------------------------
-        // CHECK ASSEMBLY ORDER
-        // -------------------------------------------------
+    public bool TryPlace(Transform snapPoint)
+    {
+        if (assembled || snapPoint == null || AssemblyManager.Instance == null)
+            return false;
 
         if (!AssemblyManager.Instance.CanAssemble(partType))
         {
-            Debug.Log(
-                gameObject.name +
-                " is NOT the current assembly part."
-            );
-
-            return;
+            SetColour(wrongColour);
+            Debug.LogWarning($"Cannot place {partType}. Required: {AssemblyManager.Instance.CurrentStepName()}");
+            return false;
         }
 
-        // -------------------------------------------------
-        // CHECK SNAP POINT
-        // -------------------------------------------------
-
-        if (snapPoint == null)
-        {
-            Debug.LogError(
-                gameObject.name +
-                " : SNAP POINT IS MISSING!"
-            );
-
-            return;
-        }
-
-        Debug.Log(
-            "SNAP STARTED -> " +
-            gameObject.name +
-            " -> " +
-            snapPoint.name
-        );
-
-        // Wait until XR Grab has completely released the object
-        StartCoroutine(SnapAfterRelease());
-    }
-
-    private IEnumerator SnapAfterRelease()
-    {
-        snapping = true;
-
-        // -------------------------------------------------
-        // WAIT FOR XR INTERACTION TOOLKIT
-        // -------------------------------------------------
-
-        // Give XR Interaction Toolkit one frame to finish
-        // its grab/release operation.
-        yield return null;
-
-        // Wait until the current frame has completely finished.
-        yield return new WaitForEndOfFrame();
-
-        // -------------------------------------------------
-        // STOP PHYSICS
-        // -------------------------------------------------
-
+        transform.SetPositionAndRotation(snapPoint.position, snapPoint.rotation);
+        rb.linearVelocity = Vector3.zero;
+        rb.angularVelocity = Vector3.zero;
         rb.isKinematic = true;
         rb.useGravity = false;
 
-        rb.linearVelocity = Vector3.zero;
-        rb.angularVelocity = Vector3.zero;
-
-        // -------------------------------------------------
-        // SNAP POSITION AND ROTATION
-        // -------------------------------------------------
-
-        transform.position = snapPoint.position;
-        transform.rotation = snapPoint.rotation;
-
-        // -------------------------------------------------
-        // SET PARENT
-        // -------------------------------------------------
-
-        // If the snap point has a parent, put the assembled
-        // part under the same parent.
-        //
-        // worldPositionStays = true means the current world
-        // position is preserved while changing parent.
-
-        if (snapPoint.parent != null)
-        {
-            transform.SetParent(
-                snapPoint.parent,
-                true
-            );
-        }
-
-        // -------------------------------------------------
-        // APPLY EXACT SNAP AGAIN
-        // -------------------------------------------------
-
-        transform.SetPositionAndRotation(
-            snapPoint.position,
-            snapPoint.rotation
-        );
-
-        // -------------------------------------------------
-        // ASSEMBLY COMPLETE
-        // -------------------------------------------------
-
         assembled = true;
-        snapping = false;
+        RestoreColour();
 
-        // Prevent the user from grabbing this part again.
-        grab.enabled = false;
+        // Disable grabbing after successful placement.
+        if (grab != null) grab.enabled = false;
 
-        // -------------------------------------------------
-        // DEBUG INFORMATION
-        // -------------------------------------------------
+        // Disable the part's solid colliders so it won't block later parts.
+        Collider[] colliders = GetComponentsInChildren<Collider>(true);
+        foreach (Collider col in colliders) col.enabled = false;
 
-        Debug.Log(
-            "================================="
-        );
+        AssemblyManager.Instance.PartAssembled(partType);
+        return true;
+    }
 
-        Debug.Log(
-            "ASSEMBLED: " +
-            gameObject.name
-        );
+    private void SetColour(Color colour)
+    {
+        foreach (Renderer rend in renderers)
+        {
+            if (rend == null) continue;
+            foreach (Material mat in rend.materials)
+            {
+                if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", colour);
+                if (mat.HasProperty("_Color")) mat.SetColor("_Color", colour);
+            }
+        }
+    }
 
-        Debug.Log(
-            "SNAP POINT: " +
-            snapPoint.name
-        );
-
-        Debug.Log(
-            "POSITION: " +
-            snapPoint.position
-        );
-
-        Debug.Log(
-            "ROTATION: " +
-            snapPoint.rotation
-        );
-
-        Debug.Log(
-            "================================="
-        );
-
-        // -------------------------------------------------
-        // TELL ASSEMBLY MANAGER
-        // -------------------------------------------------
-
-        AssemblyManager.Instance.PartAssembled(
-            partType
-        );
+    private void RestoreColour()
+    {
+        for (int i = 0; i < renderers.Length; i++)
+        {
+            if (renderers[i] == null) continue;
+            Material[] mats = renderers[i].materials;
+            for (int j = 0; j < mats.Length && j < originalColours[i].Length; j++)
+            {
+                if (mats[j].HasProperty("_BaseColor")) mats[j].SetColor("_BaseColor", originalColours[i][j]);
+                if (mats[j].HasProperty("_Color")) mats[j].SetColor("_Color", originalColours[i][j]);
+            }
+        }
     }
 }

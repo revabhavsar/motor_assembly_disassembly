@@ -119,7 +119,7 @@ Transform:
   m_GameObject: {fileID: 2715740408642560300}
   serializedVersion: 2
   m_LocalRotation: {x: 0.7071069, y: -0, z: -0, w: 0.70710665}
-  m_LocalPosition: {x: 1.8649, y: 2.46, z: -0.40423}
+  m_LocalPosition: {x: 1.8649, y: 2.46, z: -0.462}
   m_LocalScale: {x: 0.77290183, y: 0.86565, z: 0.86565}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -321,7 +321,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::AssemblyPart
   partType: 1
-  snapPoint: {fileID: 0}
+  correctColour: {r: 0, g: 1, b: 0, a: 1}
+  wrongColour: {r: 1, g: 0, b: 0, a: 1}
 --- !u!1 &5194026007435488850
 GameObject:
   m_ObjectHideFlags: 0

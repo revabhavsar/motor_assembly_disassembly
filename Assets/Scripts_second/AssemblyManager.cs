@@ -5,451 +5,121 @@ public class AssemblyManager : MonoBehaviour
 {
     public static AssemblyManager Instance;
 
-    // =====================================================
-    // PART TYPES
-    // =====================================================
+    public enum AssemblyPartType { Stator, Rotor, Shaft, Bearing, Fan, BackCover, FrontCover }
+    public enum BoltGroup { Back, Front }
 
-    public enum AssemblyPartType
-    {
-        Stator,
-        Bearing,
-        Shaft,
-        Fan,
-        RotorPart2,
-        RotorPart1,
-        BackCover,
-        FrontCover
-    }
-
-    // =====================================================
-    // BOLT GROUPS
-    // =====================================================
-
-    public enum BoltGroup
-    {
-        Back,
-        Front
-    }
-
-    // =====================================================
-    // PART REFERENCES
-    // =====================================================
-
-    [Header("Assembly Parts")]
-
+    [Header("Assembly Parts (assign the root objects' XRGrabInteractable)")]
     public XRGrabInteractable stator;
-    public XRGrabInteractable bearing;
+    public XRGrabInteractable rotor;
     public XRGrabInteractable shaft;
+    public XRGrabInteractable bearing;
     public XRGrabInteractable fan;
-
-    public XRGrabInteractable rotorPart2;
-    public XRGrabInteractable rotorPart1;
-
     public XRGrabInteractable backCover;
     public XRGrabInteractable frontCover;
 
-    // =====================================================
-    // BOLT COUNTERS
-    // =====================================================
+    [Header("Optional existing bolt system")]
+    public bool useBoltSystem = false;
 
+    private readonly AssemblyPartType[] sequence = {
+        AssemblyPartType.Stator, AssemblyPartType.Rotor, AssemblyPartType.Shaft,
+        AssemblyPartType.Bearing, AssemblyPartType.Fan, AssemblyPartType.BackCover,
+        AssemblyPartType.FrontCover
+    };
+    private int stepIndex = 0;
     private int backBolts = 0;
     private int frontBolts = 0;
 
-    // =====================================================
-    // CURRENT STEP
-    // =====================================================
-
-    private AssemblyPartType currentPart =
-        AssemblyPartType.Stator;
-
-    // =====================================================
-    // AWAKE
-    // =====================================================
-
     private void Awake()
     {
+        if (Instance != null && Instance != this)
+            Debug.LogWarning("More than one AssemblyManager exists in the scene.");
         Instance = this;
     }
 
-    // =====================================================
-    // START
-    // =====================================================
-
     private void Start()
     {
-        /*
-         * IMPORTANT:
-         * Keep ALL parts grab-able.
-         *
-         * The AssemblyPart script decides
-         * which part is allowed to snap.
-         */
-
-        EnablePart(stator);
-        EnablePart(bearing);
-        EnablePart(shaft);
-        EnablePart(fan);
-
-        EnablePart(rotorPart2);
-        EnablePart(rotorPart1);
-
-        EnablePart(backCover);
-        EnablePart(frontCover);
-
-        // Disable bolts initially
-
-        SetBoltsActive(
-            BoltGroup.Back,
-            false
-        );
-
-        SetBoltsActive(
-            BoltGroup.Front,
-            false
-        );
-
-        currentPart =
-            AssemblyPartType.Stator;
-
-        Debug.Log(
-            "ASSEMBLY STARTED"
-        );
-
-        Debug.Log(
-            "CURRENT PART: STATOR"
-        );
+        Debug.Log("Assembly started. First part: Stator");
+        SetBoltsActive(BoltGroup.Back, false);
+        SetBoltsActive(BoltGroup.Front, false);
+        SetPartGrabEnabled(stator, true);
+        SetPartGrabEnabled(rotor, true);
+        SetPartGrabEnabled(shaft, true);
+        SetPartGrabEnabled(bearing, true);
+        SetPartGrabEnabled(fan, true);
+        SetPartGrabEnabled(backCover, true);
+        SetPartGrabEnabled(frontCover, true);
     }
 
-    // =====================================================
-    // CHECK CURRENT PART
-    // =====================================================
-
-    public bool CanAssemble(
-        AssemblyPartType part)
+    public bool CanAssemble(AssemblyPartType type)
     {
-        return part == currentPart;
+        return stepIndex < sequence.Length && sequence[stepIndex] == type;
     }
 
-    // =====================================================
-    // PART ASSEMBLED
-    // =====================================================
-
-    public void PartAssembled(
-        AssemblyPartType part)
+    public AssemblyPartType CurrentStep()
     {
-        if (part != currentPart)
+        return stepIndex < sequence.Length ? sequence[stepIndex] : sequence[sequence.Length - 1];
+    }
+
+    public string CurrentStepName()
+    {
+        return stepIndex < sequence.Length ? sequence[stepIndex].ToString() : "Complete";
+    }
+
+    public void PartAssembled(AssemblyPartType type)
+    {
+        if (!CanAssemble(type))
         {
-            Debug.Log(
-                "WRONG PART: " +
-                part +
-                " | CURRENT PART: " +
-                currentPart
-            );
-
+            Debug.LogWarning($"Rejected {type}; current step is {CurrentStepName()}.");
             return;
         }
 
-        switch (part)
+        Debug.Log($"ASSEMBLED: {type}");
+        stepIndex++;
+
+        if (stepIndex >= sequence.Length)
         {
-            // =============================================
-            // 1. STATOR
-            // =============================================
-
-            case AssemblyPartType.Stator:
-
-                Debug.Log(
-                    "STEP 1 COMPLETE: STATOR"
-                );
-
-                currentPart =
-                    AssemblyPartType.Bearing;
-
-                Debug.Log(
-                    "STEP 2: BEARING"
-                );
-
-                break;
-
-
-            // =============================================
-            // 2. BEARING
-            // =============================================
-
-            case AssemblyPartType.Bearing:
-
-                Debug.Log(
-                    "STEP 2 COMPLETE: BEARING"
-                );
-
-                currentPart =
-                    AssemblyPartType.Shaft;
-
-                Debug.Log(
-                    "STEP 3: SHAFT"
-                );
-
-                break;
-
-
-            // =============================================
-            // 3. SHAFT
-            // =============================================
-
-            case AssemblyPartType.Shaft:
-
-                Debug.Log(
-                    "STEP 3 COMPLETE: SHAFT"
-                );
-
-                currentPart =
-                    AssemblyPartType.Fan;
-
-                Debug.Log(
-                    "STEP 4: FAN"
-                );
-
-                break;
-
-
-            // =============================================
-            // 4. FAN
-            // =============================================
-
-            case AssemblyPartType.Fan:
-
-                Debug.Log(
-                    "STEP 4 COMPLETE: FAN"
-                );
-
-                currentPart =
-                    AssemblyPartType.RotorPart2;
-
-                Debug.Log(
-                    "STEP 5: ROTOR PART 2"
-                );
-
-                break;
-
-
-            // =============================================
-            // 5. ROTOR PART 2
-            // =============================================
-
-            case AssemblyPartType.RotorPart2:
-
-                Debug.Log(
-                    "STEP 5 COMPLETE: ROTOR PART 2"
-                );
-
-                currentPart =
-                    AssemblyPartType.RotorPart1;
-
-                Debug.Log(
-                    "STEP 6: ROTOR PART 1"
-                );
-
-                break;
-
-
-            // =============================================
-            // 6. ROTOR PART 1
-            // =============================================
-
-            case AssemblyPartType.RotorPart1:
-
-                Debug.Log(
-                    "STEP 6 COMPLETE: ROTOR PART 1"
-                );
-
-                currentPart =
-                    AssemblyPartType.BackCover;
-
-                Debug.Log(
-                    "STEP 7: BACK COVER"
-                );
-
-                break;
-
-
-            // =============================================
-            // 7. BACK COVER
-            // =============================================
-
-            case AssemblyPartType.BackCover:
-
-                Debug.Log(
-                    "STEP 7 COMPLETE: BACK COVER"
-                );
-
-                SetBoltsActive(
-                    BoltGroup.Back,
-                    true
-                );
-
-                Debug.Log(
-                    "STEP 8: BACK BOLTS"
-                );
-
-                break;
-
-
-            // =============================================
-            // FRONT COVER
-            // =============================================
-
-            case AssemblyPartType.FrontCover:
-
-                Debug.Log(
-                    "FRONT COVER COMPLETE"
-                );
-
-                SetBoltsActive(
-                    BoltGroup.Front,
-                    true
-                );
-
-                Debug.Log(
-                    "STEP 10: FRONT BOLTS"
-                );
-
-                break;
+            Debug.Log("MOTOR ASSEMBLY COMPLETED!");
+            if (useBoltSystem)
+                SetBoltsActive(BoltGroup.Front, true);
+            return;
         }
+
+        Debug.Log($"NEXT ASSEMBLY STEP: {CurrentStepName()}");
+        if (useBoltSystem && type == AssemblyPartType.BackCover)
+            SetBoltsActive(BoltGroup.Back, true);
+        if (useBoltSystem && type == AssemblyPartType.FrontCover)
+            SetBoltsActive(BoltGroup.Front, true);
     }
 
-    // =====================================================
-    // BACK BOLTS COMPLETE
-    // =====================================================
-
-    private void BackBoltsCompleted()
+    private void SetPartGrabEnabled(XRGrabInteractable part, bool enabledState)
     {
-        Debug.Log(
-            "ALL 4 BACK BOLTS COMPLETE"
-        );
-
-        SetBoltsActive(
-            BoltGroup.Back,
-            false
-        );
-
-        currentPart =
-            AssemblyPartType.FrontCover;
-
-        Debug.Log(
-            "STEP 9: FRONT COVER"
-        );
+        if (part != null) part.enabled = enabledState;
     }
 
-    // =====================================================
-    // BOLT ASSEMBLED
-    // =====================================================
+    private void SetBoltsActive(BoltGroup group, bool activeState)
+    {
+        AssemblyBolt[] bolts = FindObjectsByType<AssemblyBolt>(
+            FindObjectsInactive.Include, FindObjectsSortMode.None);
 
-    public void BoltAssembled(
-        BoltGroup group)
+        foreach (AssemblyBolt bolt in bolts)
+            if (bolt.boltGroup == group)
+                bolt.gameObject.SetActive(activeState);
+    }
+
+    // Retained so the existing AssemblyBolt script still compiles.
+    public void BoltAssembled(BoltGroup group)
     {
         if (group == BoltGroup.Back)
         {
             backBolts++;
-
-            Debug.Log(
-                "BACK BOLT " +
-                backBolts +
-                " / 4"
-            );
-
-            if (backBolts >= 4)
-            {
-                BackBoltsCompleted();
-            }
+            Debug.Log($"BACK BOLT {backBolts}/4");
+            if (backBolts >= 4) SetBoltsActive(BoltGroup.Back, false);
         }
-
-        else if (group == BoltGroup.Front)
+        else
         {
             frontBolts++;
-
-            Debug.Log(
-                "FRONT BOLT " +
-                frontBolts +
-                " / 4"
-            );
-
-            if (frontBolts >= 4)
-            {
-                FrontBoltsCompleted();
-            }
-        }
-    }
-
-    // =====================================================
-    // FRONT BOLTS COMPLETE
-    // =====================================================
-
-    private void FrontBoltsCompleted()
-    {
-        SetBoltsActive(
-            BoltGroup.Front,
-            false
-        );
-
-        Debug.Log(
-            "================================"
-        );
-
-        Debug.Log(
-            "MOTOR ASSEMBLY COMPLETED!"
-        );
-
-        Debug.Log(
-            "================================"
-        );
-    }
-
-    // =====================================================
-    // ENABLE PART
-    // =====================================================
-
-    private void EnablePart(
-        XRGrabInteractable part)
-    {
-        if (part == null)
-            return;
-
-        Rigidbody rb =
-            part.GetComponent<Rigidbody>();
-
-        if (rb != null)
-        {
-            rb.isKinematic = true;
-            rb.useGravity = false;
-
-            rb.linearVelocity = Vector3.zero;
-            rb.angularVelocity = Vector3.zero;
-        }
-
-        // KEEP XR GRAB ENABLED
-
-        part.enabled = true;
-    }
-
-    // =====================================================
-    // BOLTS
-    // =====================================================
-
-    private void SetBoltsActive(
-        BoltGroup group,
-        bool active)
-    {
-        AssemblyBolt[] bolts =
-            FindObjectsByType<AssemblyBolt>(
-                FindObjectsInactive.Include,
-                FindObjectsSortMode.None
-            );
-
-        foreach (AssemblyBolt bolt in bolts)
-        {
-            if (bolt.boltGroup == group)
-            {
-                bolt.gameObject.SetActive(active);
-            }
+            Debug.Log($"FRONT BOLT {frontBolts}/4");
+            if (frontBolts >= 4) SetBoltsActive(BoltGroup.Front, false);
         }
     }
 }
